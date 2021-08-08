@@ -26,8 +26,34 @@ function getText(element) {
     return text;
 }
 
+function isRegexWord(word) {
+    return word.startsWith("reg:");
+}
+
 function isMuted(content) {
-    return mutes.some(mute => content.includes(mute));
+    return mutes.some(mute => {
+        if (isRegexWord(mute)) {
+            return RegExp(mute.slice("reg:".length)).test(content);
+        } else {
+            return content.includes(mute);
+        }
+    });
+}
+
+function getMuteWords(content) {
+    let words = [];
+    mutes.forEach(mute => {
+        if (isRegexWord(mute)) {
+            if (RegExp(mute.slice("reg:".length)).test(content)) {
+                words.push(mute.slice("reg:".length));
+            }
+        } else {
+            if (content.includes(mute)) {
+                words.push(mute);
+            }
+        }
+    });
+    return words;
 }
 
 function hideTrend(trend, hideButton) {
@@ -141,28 +167,44 @@ setInterval(function () {
                     }
                     let text;
                     let hideButton;
-                    if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == 2) {
+                    let hasMetadata = Array.from(trend.firstElementChild.firstElementChild.children).find(child => child.getAttribute("data-testid") == "metadata") !== undefined
+                    let count = hasMetadata ? 0 : -1
+                    if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == (2 + count)) {
                         // ニュース
                         text = trend.firstElementChild.firstElementChild.firstElementChild.children[0].children[1].innerText;
                         hideButton = null;
-                    } else if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == 5 && trend.firstElementChild.firstElementChild.firstElementChild.lastElementChild.hasChildNodes()) {
+                    } else if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == (5 + count) && trend.firstElementChild.firstElementChild.firstElementChild.lastElementChild.hasChildNodes()) {
                         // ツイート付き/ニューストレンド
                         text = trend.firstElementChild.firstElementChild.firstElementChild.children[1].innerText;
                         try {
-                            text += trend.firstElementChild.firstElementChild.firstElementChild.children[2].children[1].firstElementChild
-                                .children[1].firstElementChild.firstElementChild.firstElementChild.innerText;
+                            if (trend.firstElementChild.firstElementChild.firstElementChild.children[2].children[1].firstElementChild
+                                .children[1].childElementCount == 2) {
+                                // 画像付き
+                                text += trend.firstElementChild.firstElementChild.firstElementChild.children[2].children[1].firstElementChild
+                                .children[1].children[1].firstElementChild.firstElementChild.innerText;
+                            } else {
+                                text += trend.firstElementChild.firstElementChild.firstElementChild.children[2].children[1].firstElementChild
+                                    .children[1].firstElementChild.firstElementChild.firstElementChild.innerText;
+                            }
                         } catch (e) {
                             text += trend.firstElementChild.firstElementChild.firstElementChild.children[2].firstElementChild
                                 .firstElementChild.firstElementChild.firstElementChild.children[1].firstElementChild.innerText;
                         }
                         hideButton = trend.firstElementChild.firstElementChild.firstElementChild.lastElementChild.firstElementChild.firstElementChild;
-                    } else if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == 6) {
+                    } else if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == (6 + count)) {
                         // ツイート付き/ニューストレンド (解説付き)
                         text = trend.firstElementChild.firstElementChild.firstElementChild.children[1].innerText;
                         text += trend.firstElementChild.firstElementChild.firstElementChild.children[2].innerText;
                         try {
-                            text += trend.firstElementChild.firstElementChild.firstElementChild.children[3].children[1].firstElementChild
-                                .children[1].firstElementChild.firstElementChild.firstElementChild.innerText;
+                            if (trend.firstElementChild.firstElementChild.firstElementChild.children[3].children[1].firstElementChild
+                                .children[1].childElementCount == 2) {
+                                // 画像付き
+                                text += trend.firstElementChild.firstElementChild.firstElementChild.children[3].children[1].firstElementChild
+                                    .children[1].children[1].firstElementChild.firstElementChild.innerText;
+                            } else {
+                                text += trend.firstElementChild.firstElementChild.firstElementChild.children[3].children[1].firstElementChild
+                                    .children[1].firstElementChild.firstElementChild.firstElementChild.innerText;
+                            }
                         } catch (e) {
                             text += trend.firstElementChild.firstElementChild.firstElementChild.children[3].firstElementChild
                                 .firstElementChild.firstElementChild.firstElementChild.children[1].firstElementChild.innerText;
@@ -182,8 +224,7 @@ setInterval(function () {
                     }
                     if (isMuted(text)) {
                         hideTrend(trend, hideButton);
-                        let words = mutes.filter(mute => text.includes(mute));
-                        console.log(`Removed trend including words '${words}'`, trend);
+                        console.log(`Removed trend including words '${getMuteWords(text)}'`, trend);
                     }
                     trend.setAttribute("muteChecked", "true");
                 } catch (e) {
@@ -231,8 +272,7 @@ setInterval(function () {
                     }
                     if (isMuted(text)) {
                         hideTrend(trend, hideButton);
-                        let words = mutes.filter(mute => text.includes(mute));
-                        console.log(`Removed trend including words '${words}'`, trend);
+                        console.log(`Removed trend including words '${getMuteWords(text)}'`, trend);
                     }
                     trend.setAttribute("muteChecked", "true");
                 } catch (e) {
@@ -276,8 +316,7 @@ setInterval(function () {
                         let text = getText(textField);
                         if (isMuted(text)) {
                             tweet.style.display = "none";
-                            let words = mutes.filter(mute => text.includes(mute));
-                            console.log(`Removed tweet including words '${words}'`, tweet);
+                            console.log(`Removed tweet including words '${getMuteWords(text)}'`, tweet);
                         }
                         tweet.setAttribute("muteChecked", "true");
                     } catch (e) {
