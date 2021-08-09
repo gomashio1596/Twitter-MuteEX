@@ -167,7 +167,7 @@ setInterval(function () {
                     }
                     let text;
                     let hideButton;
-                    let hasMetadata = Array.from(trend.firstElementChild.firstElementChild.children).find(child => child.getAttribute("data-testid") == "metadata") !== undefined
+                    let hasMetadata = Array.from(trend.firstElementChild.firstElementChild.firstElementChild.children).find(child => child.getAttribute("data-testid") == "metadata") !== undefined
                     let count = hasMetadata ? 0 : -1
                     if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == (2 + count)) {
                         // ニュース
