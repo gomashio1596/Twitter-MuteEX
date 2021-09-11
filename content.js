@@ -8,6 +8,14 @@ chrome.storage.sync.get(["mutes"], function (items) {
     mutes = mutes.filter(mute => mute != "");
     console.log(mutes);
 });
+let ignores = [];
+chrome.storage.sync.get(["ignores"], (items) => {
+    if (items["ignores"] != undefined) {
+        ignores = items["ignores"];
+    }
+    ignores = ignores.filter(ignore => ignore != "");
+    console.log(ignores);
+});
 
 function printStackTrace(e) {
     if (e.stack) {
@@ -30,27 +38,25 @@ function isRegexWord(word) {
     return word.startsWith("reg:");
 }
 
-function isMuted(content) {
-    return mutes.some(mute => {
-        if (isRegexWord(mute)) {
-            return RegExp(mute.slice("reg:".length)).test(content);
-        } else {
-            return content.includes(mute);
-        }
-    });
+function isIgnoreWord(word) {
+    return word.startsWith("ignore:");
 }
 
 function getMuteWords(content) {
     let words = [];
     mutes.forEach(mute => {
+        let index;
+        let contentSliced;
         if (isRegexWord(mute)) {
-            if (RegExp(mute.slice("reg:".length)).test(content)) {
-                words.push(mute.slice("reg:".length));
-            }
+            index = content.search(RegExp(mute.slice("reg:".length)));
+            contentSliced = content.substring(index);
         } else {
-            if (content.includes(mute)) {
-                words.push(mute);
-            }
+            index = content.indexOf(mute);
+            contentSliced = content.substring(index);
+        }
+        let isIgnore = ignores.some(ignore => contentSliced.startsWith(ignore.slice("ignore:".length)));
+        if (index != -1 && !isIgnore) {
+            words.push(mute);
         }
     });
     return words;
@@ -84,7 +90,7 @@ function hideTrend(trend, hideButton) {
 
 // https://stackoverflow.com/questions/3115982/how-to-check-if-two-arrays-are-equal-with-javascript
 function arraysEqual(a, b, checkOrder = false) {
-    if (a === b)  {
+    if (a === b) {
         return true;
     }
     if (a == null || b == null) {
@@ -93,12 +99,12 @@ function arraysEqual(a, b, checkOrder = false) {
     if (a.length !== b.length) {
         return false;
     }
-  
+
     if (checkOrder) {
         a.sort();
         b.sort();
     }
-  
+
     for (var i = 0; i < a.length; ++i) {
         if (a[i] !== b[i]) {
             return false;
@@ -111,7 +117,8 @@ setInterval(function () {
     if (location.pathname.startsWith("/settings")) {
         if (location.pathname == "/settings/muted_keywords") {
             try {
-                let temp = [];
+                let muteTemp = [];
+                let ignoreTemp = [];
                 let muteWords = document.querySelectorAll(
                     "main > div > div > div > section:nth-child(2) > div:nth-child(2) > div > div[tabindex='0']"
                 );
@@ -119,15 +126,26 @@ setInterval(function () {
                     let muteTextField = muteWord.children[0].children[0];
                     let text = getText(muteTextField);
                     if (text != "") {
-                        temp.push(text);
+                        if (isIgnoreWord(text)) {
+                            ignoreTemp.push(text);
+                        } else {
+                            muteTemp.push(text);
+                        }
                     }
                 });
-                if (!arraysEqual(temp, mutes)) {
-                    mutes.splice(0, mutes.length, ...temp);
+                if (!arraysEqual(muteTemp, mutes)) {
+                    mutes.splice(0, mutes.length, ...muteTemp);
                     chrome.storage.sync.set({
                         mutes: mutes
                     });
                     console.log("Updated mute words", mutes);
+                }
+                if (!arraysEqual(ignoreTemp, ignores)) {
+                    ignores.splice(0, ignores.length, ...ignoreTemp);
+                    chrome.storage.sync.set({
+                        ignores: ignores
+                    });
+                    console.log("Updated ignore words", ignores);
                 }
             } catch (e) {
                 if (!errors.includes(e)) {
@@ -167,7 +185,9 @@ setInterval(function () {
                     }
                     let text;
                     let hideButton;
-                    let hasMetadata = Array.from(trend.firstElementChild.firstElementChild.firstElementChild.children).find(child => child.getAttribute("data-testid") == "metadata") !== undefined
+                    let hasMetadata = Array.from(trend.firstElementChild.firstElementChild.firstElementChild.children).find(child =>
+                        child.getAttribute("data-testid") == "metadata" || (child.getAttribute("dir") == "auto" && child.previousElementSibling.getAttribute("dir") != "ltr")
+                    ) !== undefined
                     let count = hasMetadata ? 0 : -1
                     if (trend.firstElementChild.firstElementChild.firstElementChild.childElementCount == (2 + count)) {
                         // ニュース
@@ -181,7 +201,7 @@ setInterval(function () {
                                 .children[1].childElementCount == 2) {
                                 // 画像付き
                                 text += trend.firstElementChild.firstElementChild.firstElementChild.children[2].children[1].firstElementChild
-                                .children[1].children[1].firstElementChild.firstElementChild.innerText;
+                                    .children[1].children[1].firstElementChild.firstElementChild.innerText;
                             } else {
                                 text += trend.firstElementChild.firstElementChild.firstElementChild.children[2].children[1].firstElementChild
                                     .children[1].firstElementChild.firstElementChild.firstElementChild.innerText;
@@ -222,9 +242,10 @@ setInterval(function () {
                             hideButton = null;
                         }
                     }
-                    if (isMuted(text)) {
+                    let muteWords = getMuteWords(text);
+                    if (muteWords.length != 0) {
                         hideTrend(trend, hideButton);
-                        console.log(`Removed trend including words '${getMuteWords(text)}'`, trend);
+                        console.log(`Removed trend including words '${muteWords}'`, trend);
                     }
                     trend.setAttribute("muteChecked", "true");
                 } catch (e) {
@@ -239,13 +260,13 @@ setInterval(function () {
             let trends;
             if (location.pathname.startsWith("/search")) {
                 trends = Array.from(document.querySelectorAll(
-                    "main > div > div > div > div:nth-child(2) > div > div:nth-child(2) > div > div > div > "
-                    + "div:nth-child(2) > div > div > section > div > div > div"
+                    "main > div > div > div > div:nth-child(2) > div > div:nth-child(2) > div > div > div > " +
+                    "div:nth-child(2) > div > div > section > div > div > div"
                 ));
             } else {
                 trends = Array.from(document.querySelectorAll(
-                    "main > div > div > div > div:nth-child(2) > div > div:nth-child(2) > div > div > div > "
-                    + "div:nth-child(3) > div > div > section > div:nth-child(2) > div > div"
+                    "main > div > div > div > div:nth-child(2) > div > div:nth-child(2) > div > div > div > " +
+                    "div:nth-child(3) > div > div > section > div:nth-child(2) > div > div"
                 ));
             }
             trends.slice(2, -1).forEach(trend => {
@@ -270,9 +291,10 @@ setInterval(function () {
                     } catch (e) {
                         hideButton = null;
                     }
-                    if (isMuted(text)) {
+                    let muteWords = getMuteWords(text);
+                    if (muteWords.length != 0) {
                         hideTrend(trend, hideButton);
-                        console.log(`Removed trend including words '${getMuteWords(text)}'`, trend);
+                        console.log(`Removed trend including words '${muteWords}'`, trend);
                     }
                     trend.setAttribute("muteChecked", "true");
                 } catch (e) {
@@ -283,7 +305,7 @@ setInterval(function () {
                     }
                 }
             });
-    
+
             if (location.pathname.startsWith("/search")) {
                 let tweets = document.querySelectorAll(
                     "main > div > div > div > div > div > div:nth-child(2) > div > div > section > div > div > div"
@@ -293,7 +315,7 @@ setInterval(function () {
                         if (tweet.getAttribute("muteChecked") == "true") {
                             return;
                         }
-                        let tweetContainer = tweet.querySelector("div > div > article > div > div > div > div[data-testid=tweet]");
+                        let tweetContainer = tweet.querySelector("[data-testid=tweet] > div > div > div > div:nth-child(2)");
                         if (tweetContainer == null) {
                             return;
                         }
@@ -314,9 +336,10 @@ setInterval(function () {
                             return;
                         }
                         let text = getText(textField);
-                        if (isMuted(text)) {
+                        let muteWords = getMuteWords(text);
+                        if (muteWords.length != 0) {
                             tweet.style.display = "none";
-                            console.log(`Removed tweet including words '${getMuteWords(text)}'`, tweet);
+                            console.log(`Removed tweet including words '${muteWords}'`, tweet);
                         }
                         tweet.setAttribute("muteChecked", "true");
                     } catch (e) {
