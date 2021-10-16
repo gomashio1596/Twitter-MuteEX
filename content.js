@@ -308,7 +308,7 @@ setInterval(function () {
 
             if (location.pathname.startsWith("/search")) {
                 let tweets = document.querySelectorAll(
-                    "main > div > div > div > div > div > div:nth-child(2) > div > div > section > div > div > div"
+                    'section[aria-labelledby^="accessible-list-"][role="region"] > h1[role="heading"] + div > div > div'
                 );
                 tweets.forEach(tweet => {
                     try {
